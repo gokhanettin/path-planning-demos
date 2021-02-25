@@ -1,0 +1,13 @@
+<launch>
+
+  <!-- Start rrtstar node -->
+  <node pkg="rrtstar"
+    name="rrtstar_node"
+    type="rrtstar_node"/>
+
+  <!-- Show in Rviz   -->
+  <node pkg="rviz"
+        name="rviz"
+        type="rviz"
+        args="-d $(find rrtstar)/rviz/rrtstar.rviz"/>
+</launch>
