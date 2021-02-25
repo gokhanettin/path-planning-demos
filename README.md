@@ -1,4 +1,19 @@
-## Build
+# Path Planning Demonstrations
+
+## Run Python Scripts
+
+It is straightforward to run the scripts.
+
+```
+python rrt.py
+python rrtstar.py
+python astar.py
+python breadth_first_search.py
+python dijkstra.py
+python prm.py
+```
+
+## Build ROS Package
 
 ```
 cd ros
@@ -6,7 +21,7 @@ catkin_make
 source devel/setup.sh
 ```
 
-## Run
+## Run ROS Node
 
 Launch RRTstar service in a terminal session as follows:
 
