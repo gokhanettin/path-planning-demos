@@ -19,7 +19,7 @@ session.
 
 ```
 rosservice call /make_plan <squareAreaSide> <obstacleRadius> <obstacleCount> \
-    <startX> <startY> <goalX> <goalY> <maxRunTime>
+    <startX> <startY> <goalX> <goalY> <maxRunTimeSeconds>
 ```
 
 Here is an example call:

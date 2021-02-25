@@ -279,12 +279,12 @@ bool makePlan(rrtstar::MakePlan::Request &req,
 
     // Attempt to solve the planning problem in the given runtime
     double startTime = ros::Time::now().toSec();
-    ob::PlannerStatus solved = optimizingPlanner->solve(req.maxRunTime);
+    ob::PlannerStatus solved = optimizingPlanner->solve(req.maxRunTimeSeconds);
     double endTime = ros::Time::now().toSec();
 
     if (solved)
     {
-        res.elapsedTime = (endTime - startTime) / 1000.;
+        res.elapsedTimeMiliseconds = (endTime - startTime) / 1000.;
         res.found = true;
 
         og::PathGeometric pg = *static_cast<og::PathGeometric*>(
@@ -314,14 +314,14 @@ bool makePlan(rrtstar::MakePlan::Request &req,
     }
     else
     {
-        res.elapsedTime = 0.0;
+        res.elapsedTimeMiliseconds = 0.0;
         res.found = false;
     }
 
     ROS_INFO("request: [start(%lf, %lf), goal(%lf, %lf)]",
              req.startX, req.startY, req.goalX, req.goalY);
     ROS_INFO("sending back response: [path found: %s within %lf miliseconds]",
-             res.found ? "true" : "false", res.elapsedTime);
+             res.found ? "true" : "false", res.elapsedTimeMiliseconds);
 
     return true;
 }

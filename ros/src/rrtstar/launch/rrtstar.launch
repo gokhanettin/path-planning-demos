@@ -3,7 +3,8 @@
   <!-- Start rrtstar node -->
   <node pkg="rrtstar"
     name="rrtstar_node"
-    type="rrtstar_node"/>
+    type="rrtstar_node"
+    output="screen"/>
 
   <!-- Show in Rviz   -->
   <node pkg="rviz"

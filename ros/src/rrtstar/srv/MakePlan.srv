@@ -5,7 +5,7 @@ float64 startX
 float64 startY
 float64 goalX
 float64 goalY
-float64 maxRunTime # seconds
+float64 maxRunTimeSeconds
 ---
 bool   found
-float64 elapsedTime # miliseconds
+float64 elapsedTimeMiliseconds
