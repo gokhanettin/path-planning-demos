@@ -68,6 +68,7 @@ public:
         ObstacleList obstacles_;
 };
 
+// --- Define some objective functions ----
 ob::OptimizationObjectivePtr getPathLengthObjective(const ob::SpaceInformationPtr& si)
 {
     return std::make_shared<ob::PathLengthOptimizationObjective>(si);
@@ -76,7 +77,7 @@ ob::OptimizationObjectivePtr getPathLengthObjective(const ob::SpaceInformationPt
 ob::OptimizationObjectivePtr getThresholdPathLengthObj(const ob::SpaceInformationPtr& si)
 {
     auto obj(std::make_shared<ob::PathLengthOptimizationObjective>(si));
-    obj->setCostThreshold(ob::Cost(100.0));
+    obj->setCostThreshold(ob::Cost(300.0));
     return obj;
 }
 
@@ -105,7 +106,7 @@ ob::OptimizationObjectivePtr getClearanceObjective(const ob::SpaceInformationPtr
     return std::make_shared<ClearanceObjective>(si);
 }
 
-ob::OptimizationObjectivePtr getBalancedObjective1(const ob::SpaceInformationPtr& si)
+ob::OptimizationObjectivePtr getBalancedObjective(const ob::SpaceInformationPtr& si)
 {
     auto lengthObj(std::make_shared<ob::PathLengthOptimizationObjective>(si));
     auto clearObj(std::make_shared<ClearanceObjective>(si));
@@ -115,21 +116,7 @@ ob::OptimizationObjectivePtr getBalancedObjective1(const ob::SpaceInformationPtr
 
     return ob::OptimizationObjectivePtr(opt);
 }
-
-ob::OptimizationObjectivePtr getBalancedObjective2(const ob::SpaceInformationPtr& si)
-{
-    auto lengthObj(std::make_shared<ob::PathLengthOptimizationObjective>(si));
-    auto clearObj(std::make_shared<ClearanceObjective>(si));
-
-    return 10.0*lengthObj + clearObj;
-}
-
-ob::OptimizationObjectivePtr getPathLengthObjWithCostToGo(const ob::SpaceInformationPtr& si)
-{
-    auto obj(std::make_shared<ob::PathLengthOptimizationObjective>(si));
-    obj->setCostToGoHeuristic(&ob::goalRegionCostToGo);
-    return obj;
-}
+// --- End of objective functions ----
 
 ob::PlannerPtr allocatePlanner(ob::SpaceInformationPtr si)
 {
@@ -142,7 +129,7 @@ ob::OptimizationObjectivePtr allocateObjective(const ob::SpaceInformationPtr& si
     return getPathLengthObjective(si);
     // return getClearanceObjective(si);
     // return getThresholdPathLengthObj(si);
-    // return getBalancedObjective1(si);
+    // return getBalancedObjective(si);
 }
 
 class RRTStarPlanner
@@ -171,7 +158,29 @@ class RRTStarPlanner
                     obstacleRadius, obstacleCount);
         }
 
-        void visualize(double startX, double startY, double goalX, double goalY)
+        void publishSolutionPath(ob::PathPtr path)
+        {
+            og::PathGeometric pg = *static_cast<og::PathGeometric*>(path.get());
+            auto states = pg.getStates();
+            std::vector<geometry_msgs::PoseStamped> poses(states.size());
+            nav_msgs::Path msg;
+            msg.header.frame_id = "map";
+            msg.header.stamp = ros::Time::now();
+
+            for (int i = 0; i < states.size(); i++)
+            {
+                const auto* state =
+                        states.at(i)->as<ob::RealVectorStateSpace::StateType>();
+                poses.at(i).pose.position.x = state->values[0];
+                poses.at(i).pose.position.y = state->values[1];
+            }
+
+            msg.poses = poses;
+            pathPublisher_.publish(msg);
+        }
+
+        void publishConfiguration(double startX, double startY,
+                double goalX, double goalY)
         {
             visualization_msgs::MarkerArray markerArray;
             visualization_msgs::Marker      marker;
@@ -245,7 +254,7 @@ class RRTStarPlanner
         bool makePlan(rrtstar::MakePlan::Request &req,
                     rrtstar::MakePlan::Response & res)
         {
-            visualize(req.startX, req.startY, req.goalX, req.goalY);
+            publishConfiguration(req.startX, req.startY, req.goalX, req.goalY);
 
             // Construct the robot state space in which we're planning. We're
             // planning in [0, SQUARE_AREA_SIDE]x[0, SQUARE_AREA_SIDE], a subset of R^2.
@@ -299,23 +308,7 @@ class RRTStarPlanner
             {
                 res.elapsedTimeMiliseconds = (endTime - startTime) * 1000.;
                 res.found = true;
-
-                og::PathGeometric pg = *static_cast<og::PathGeometric*>(
-                            pdef->getSolutionPath().get());
-                auto states = pg.getStates();
-                std::vector<geometry_msgs::PoseStamped> poses(states.size());
-                nav_msgs::Path msg;
-                msg.header.frame_id = "map";
-                msg.header.stamp = ros::Time::now();
-                for (int i = 0; i < states.size(); i++)
-                {
-                    const auto* state =
-                            states.at(i)->as<ob::RealVectorStateSpace::StateType>();
-                    poses.at(i).pose.position.x = state->values[0];
-                    poses.at(i).pose.position.y = state->values[1];
-                }
-                msg.poses = poses;
-                pathPublisher_.publish(msg);
+                publishSolutionPath(pdef->getSolutionPath());
             }
             else
             {
