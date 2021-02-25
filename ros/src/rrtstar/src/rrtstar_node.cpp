@@ -68,68 +68,10 @@ public:
         ObstacleList obstacles_;
 };
 
-// --- Define some objective functions ----
-ob::OptimizationObjectivePtr getPathLengthObjective(const ob::SpaceInformationPtr& si)
-{
-    return std::make_shared<ob::PathLengthOptimizationObjective>(si);
-}
-
-ob::OptimizationObjectivePtr getThresholdPathLengthObj(const ob::SpaceInformationPtr& si)
-{
-    auto obj(std::make_shared<ob::PathLengthOptimizationObjective>(si));
-    obj->setCostThreshold(ob::Cost(300.0));
-    return obj;
-}
-
-class ClearanceObjective : public ob::StateCostIntegralObjective
-{
-public:
-    ClearanceObjective(const ob::SpaceInformationPtr& si) :
-        ob::StateCostIntegralObjective(si, true)
-    {
-    }
-
-    // Our requirement is to maximize path clearance from obstacles,
-    // but we want to represent the objective as a path cost
-    // minimization. Therefore, we set each state's cost to be the
-    // reciprocal of its clearance, so that as state clearance
-    // increases, the state cost decreases.
-    ob::Cost stateCost(const ob::State* s) const override
-    {
-        return ob::Cost(1 / (si_->getStateValidityChecker()->clearance(s) +
-            std::numeric_limits<double>::min()));
-    }
-};
-
-ob::OptimizationObjectivePtr getClearanceObjective(const ob::SpaceInformationPtr& si)
-{
-    return std::make_shared<ClearanceObjective>(si);
-}
-
-ob::OptimizationObjectivePtr getBalancedObjective(const ob::SpaceInformationPtr& si)
-{
-    auto lengthObj(std::make_shared<ob::PathLengthOptimizationObjective>(si));
-    auto clearObj(std::make_shared<ClearanceObjective>(si));
-    auto opt(std::make_shared<ob::MultiOptimizationObjective>(si));
-    opt->addObjective(lengthObj, 100.0);
-    opt->addObjective(clearObj, 1.0);
-
-    return ob::OptimizationObjectivePtr(opt);
-}
-// --- End of objective functions ----
-
 ob::PlannerPtr allocatePlanner(ob::SpaceInformationPtr si)
 {
     auto planner = std::make_shared<og::RRTstar>(si);
     return planner;
-}
-
-ob::OptimizationObjectivePtr allocateObjective(const ob::SpaceInformationPtr& si)
-{
-    return getPathLengthObjective(si);
-    // return getClearanceObjective(si);
-    // return getThresholdPathLengthObj(si);
-    // return getBalancedObjective(si);
 }
 
 class RRTStarPlanner
@@ -290,10 +232,14 @@ class RRTStarPlanner
             pdef->setStartAndGoalStates(start, goal);
 
             // Create the optimization objective
-            pdef->setOptimizationObjective(allocateObjective(si));
+
+
+            auto objective(std::make_shared<ob::PathLengthOptimizationObjective>(si));
+            //objective->setCostThreshold(ob::Cost(area_->getSide() * 10));
+            pdef->setOptimizationObjective(objective);
 
             // Construct the optimal planner
-            ob::PlannerPtr optimizingPlanner = allocatePlanner(si);
+            ob::PlannerPtr optimizingPlanner(std::make_shared<og::RRTstar>(si));
 
             // Set the problem instance for our planner to solve
             optimizingPlanner->setProblemDefinition(pdef);

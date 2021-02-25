@@ -10,7 +10,7 @@
     max_run_time_seconds: 1.0
     square_area_side: 100.0
     obstacle_radius: 5.0
-    obstacle_count: 50
+    obstacle_count: 30
   </rosparam>
 
   <!-- Show in Rviz   -->
