@@ -47,19 +47,31 @@ class RRTStar:
         self.goal_node = self.Node(goal[0], goal[1])
 
     def step(self):
-        """
-        rrt star path planning
-        """
-
+        # 1 - Get a random node, occasionally select the goal in place of
+        # random node.
         random_node = self.get_random_node()
+        # 2 - Find existing nearest node to the random node
         nearest_ind = self.get_nearest_node_index(self.node_list, random_node)
+        nearest_node = self.node_list[nearest_ind]
+
+        # 3 - Find the node that expands towards the random node from the
+        # nearest node with max of given extand distance
         new_node = self.steer(self.node_list[nearest_ind], random_node,
                                 self.expand_dis)
-        nearest_node = self.node_list[nearest_ind]
+
+        # 4 - Compute the cost to reach at this new node from the starting node
         new_node.cost = nearest_node.cost + \
             math.hypot(new_node.x-nearest_node.x,
                         new_node.y-nearest_node.y)
 
+        # 5 - If no collision, we don't connect the new node to the nearest of
+        # the random node, but we select a nearest node within a circle
+        # centered at new node with radius expand distance or we apply some
+        # dynamic radius such that the circle gets smaller as we add nodes.
+        # In other words, new node changes its parent.
+
+        # 6- We also rewire the nodes within the circle if the new node can
+        # reduce their costs for coming from the starting point.
         if self.check_collision(new_node, self.obstacle_list):
             near_inds = self.find_near_nodes(new_node)
             node_with_updated_parent = self.choose_parent(
@@ -70,6 +82,8 @@ class RRTStar:
             else:
                 self.node_list.append(new_node)
 
+        # 7- Check if there is a path from a node to the goal
+        # without a collision.
         last_index = self.search_best_goal_node()
         if last_index is not None:
             self.path = self.generate_final_course(last_index)

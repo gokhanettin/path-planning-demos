@@ -37,14 +37,23 @@ class RRT:
         self.anim = {}
 
     def step(self):
+        # 1 - Get a random node, occasionally select the goal in place of
+        # random node.
         random_node = self.get_random_node()
+        # 2 - Find existing nearest node to the random node
         nearest_ind = self.get_nearest_node_index(self.node_list, random_node)
         nearest_node = self.node_list[nearest_ind]
+        # 3 - Expand towards the random node from the nearest node with max of
+        # given extand distance
         new_node = self.steer(nearest_node, random_node, self.expand_dis)
 
+        # 4 - If no collision add the new expand node to the list.
         if self.check_collision(new_node, self.obstacle_list):
             self.node_list.append(new_node)
 
+        # 5- If the goal is within the expand distance from the last node,
+        # directly expand towards the goal node. If no collision, the path is
+        # found.
         if self.calc_dist_to_goal(self.node_list[-1].x,
                                     self.node_list[-1].y) <= self.expand_dis:
             final_node = self.steer(self.node_list[-1], self.end,
