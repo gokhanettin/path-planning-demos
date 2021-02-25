@@ -68,12 +68,6 @@ public:
         ObstacleList obstacles_;
 };
 
-ob::PlannerPtr allocatePlanner(ob::SpaceInformationPtr si)
-{
-    auto planner = std::make_shared<og::RRTstar>(si);
-    return planner;
-}
-
 class RRTStarPlanner
 {
     public:
