@@ -160,9 +160,9 @@ class RRTStarPlanner
             marker.header.frame_id = "map";
             marker.header.stamp = ros::Time::now();
             marker.id = id;
-            marker.scale.x = 1.5;
-            marker.scale.y = 1.5;
-            marker.scale.z = 1.5;
+            marker.scale.x = 2.5;
+            marker.scale.y = 2.5;
+            marker.scale.z = 2.5;
             marker.pose.position.x = startX;
             marker.pose.position.y = startY;
             marker.pose.position.z = 0.0;
@@ -178,9 +178,9 @@ class RRTStarPlanner
             marker.header.frame_id = "map";
             marker.header.stamp = ros::Time::now();
             marker.id = id;
-            marker.scale.x = 1.5;
-            marker.scale.y = 1.5;
-            marker.scale.z = 1.5;
+            marker.scale.x = 2.5;
+            marker.scale.y = 2.5;
+            marker.scale.z = 2.5;
             marker.pose.position.x = goalX;
             marker.pose.position.y = goalY;
             marker.pose.position.z = 0.0;
