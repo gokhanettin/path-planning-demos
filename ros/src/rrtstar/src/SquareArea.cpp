@@ -11,6 +11,11 @@ double SquareArea::getSide() const
     return side_;
 }
 
+int SquareArea::getObstacleCount() const
+{
+    return obstacles_.size();
+}
+
 ObstacleList SquareArea::getObstacles() const
 {
     return obstacles_;

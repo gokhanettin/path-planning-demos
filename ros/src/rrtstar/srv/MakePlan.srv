@@ -1,11 +1,7 @@
-float64 squareAreaSide
-float64 obstacleRadius
-int32   obstacleCount
 float64 startX
 float64 startY
 float64 goalX
 float64 goalY
-float64 maxRunTimeSeconds
 ---
 bool   found
 float64 elapsedTimeMiliseconds

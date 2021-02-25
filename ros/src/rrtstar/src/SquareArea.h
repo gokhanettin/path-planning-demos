@@ -21,6 +21,7 @@ class SquareArea
         void operator=(const SquareArea &) = delete;
 
         double getSide() const;
+        int getObstacleCount() const;
         ObstacleList getObstacles() const;
         static SquareAreaPtr create(double squareSide,
                 double obstacleRadius, int obstacleCount);

@@ -145,197 +145,208 @@ ob::OptimizationObjectivePtr allocateObjective(const ob::SpaceInformationPtr& si
     // return getBalancedObjective1(si);
 }
 
-
-
-ros::Publisher markerPublisher;
-ros::Publisher pathPublisher;
-
-void visualize(const SquareAreaPtr& area, double startX, double startY,
-        double goalX, double goalY)
+class RRTStarPlanner
 {
-    visualization_msgs::MarkerArray markerArray;
-    visualization_msgs::Marker      marker;
-    int id = 0;
-
-    marker.action = visualization_msgs::Marker::ADD;
-    marker.pose.orientation.x = 0.0;
-    marker.pose.orientation.y = 0.0;
-    marker.pose.orientation.z = 0.0;
-    marker.pose.orientation.w = 1.0;
-    marker.color.a = 1.0; // Don't forget to set the alpha!
-    marker.color.r = 1.0;
-    marker.color.g = 0.0;
-    marker.color.b = 0.0;
-
-    // obstacles
-    for (auto obstacle : area->getObstacles())
-    {
-        marker.type = visualization_msgs::Marker::CYLINDER;
-        marker.header.frame_id = "map";
-        marker.header.stamp = ros::Time::now();
-        marker.id = id;
-        marker.scale.x = obstacle->getRadius() * 2;
-        marker.scale.y = obstacle->getRadius() * 2;
-        marker.scale.z = 0.5;
-        marker.pose.position.x = obstacle->getX();
-        marker.pose.position.y = obstacle->getY();
-        marker.pose.position.z = 0.0;
-        markerArray.markers.push_back(marker);
-        id++;
-    }
-
-    // start position
-    marker.type = visualization_msgs::Marker::CUBE;
-    marker.header.frame_id = "map";
-    marker.header.stamp = ros::Time::now();
-    marker.id = id;
-    marker.scale.x = 1.5;
-    marker.scale.y = 1.5;
-    marker.scale.z = 1.5;
-    marker.pose.position.x = startX;
-    marker.pose.position.y = startY;
-    marker.pose.position.z = 0.0;
-    marker.color.a = 1.0; // Don't forget to set the alpha!
-    marker.color.r = 0.0;
-    marker.color.g = 1.0;
-    marker.color.b = 0.0;
-    id++;
-    markerArray.markers.push_back(marker);
-
-    // goal position
-    marker.type = visualization_msgs::Marker::CUBE;
-    marker.header.frame_id = "map";
-    marker.header.stamp = ros::Time::now();
-    marker.id = id;
-    marker.scale.x = 1.5;
-    marker.scale.y = 1.5;
-    marker.scale.z = 1.5;
-    marker.pose.position.x = goalX;
-    marker.pose.position.y = goalY;
-    marker.pose.position.z = 0.0;
-    marker.color.a = 1.0; // Don't forget to set the alpha!
-    marker.color.r = 0.0;
-    marker.color.g = 0.0;
-    marker.color.b = 1.0;
-    id++;
-    markerArray.markers.push_back(marker);
-
-    markerPublisher.publish(markerArray);
-}
-
-
-
-bool makePlan(rrtstar::MakePlan::Request &req,
-               rrtstar::MakePlan::Response & res)
-{
-    // Create a square area with some random cirular obstacles
-    auto area = SquareArea::create(req.squareAreaSide,
-                                   req.obstacleRadius,
-                                   req.obstacleCount);
-    visualize(area, req.startX, req.startY, req.goalX, req.goalY);
-
-    // Construct the robot state space in which we're planning. We're
-    // planning in [0, SQUARE_AREA_SIDE]x[0, SQUARE_AREA_SIDE], a subset of R^2.
-    auto space(std::make_shared<ob::RealVectorStateSpace>(2));
-
-    // Set the bounds of space to be in [0, SQUARE_AREA_SIDE].
-    space->setBounds(0.0, area->getSide());
-
-    // Construct a space information instance for this state space
-    auto si(std::make_shared<ob::SpaceInformation>(space));
-
-    // Set the object used to check which states in the space are valid
-    auto validityChecker = std::make_shared<ValidityChecker>(si,
-            area->getObstacles());
-    si->setStateValidityChecker(validityChecker);
-
-    si->setup();
-
-    // Set our robot's starting state
-    ob::ScopedState<> start(space);
-    start->as<ob::RealVectorStateSpace::StateType>()->values[0] = req.startX;
-    start->as<ob::RealVectorStateSpace::StateType>()->values[1] = req.startY;
-
-    // Set our robot's goal state
-    ob::ScopedState<> goal(space);
-    goal->as<ob::RealVectorStateSpace::StateType>()->values[0] = req.goalX;
-    goal->as<ob::RealVectorStateSpace::StateType>()->values[1] = req.goalY;
-
-    // Create a problem instance
-    auto pdef(std::make_shared<ob::ProblemDefinition>(si));
-
-    // Set the start and goal states
-    pdef->setStartAndGoalStates(start, goal);
-
-    // Create the optimization objective
-    pdef->setOptimizationObjective(allocateObjective(si));
-
-    // Construct the optimal planner
-    ob::PlannerPtr optimizingPlanner = allocatePlanner(si);
-
-    // Set the problem instance for our planner to solve
-    optimizingPlanner->setProblemDefinition(pdef);
-    optimizingPlanner->setup();
-
-    // Attempt to solve the planning problem in the given runtime
-    double startTime = ros::Time::now().toSec();
-    ob::PlannerStatus solved = optimizingPlanner->solve(req.maxRunTimeSeconds);
-    double endTime = ros::Time::now().toSec();
-
-    if (solved)
-    {
-        res.elapsedTimeMiliseconds = (endTime - startTime) / 1000.;
-        res.found = true;
-
-        og::PathGeometric pg = *static_cast<og::PathGeometric*>(
-                    pdef->getSolutionPath().get());
-        auto states = pg.getStates();
-        std::vector<geometry_msgs::PoseStamped> poses(states.size());
-        nav_msgs::Path msg;
-        msg.header.frame_id = "map";
-        msg.header.stamp = ros::Time::now();
-        for (int i = 0; i < states.size(); i++)
+    public:
+        RRTStarPlanner(ros::NodeHandle *nh)
         {
-            const auto* state =
-                    states.at(i)->as<ob::RealVectorStateSpace::StateType>();
-            poses.at(i).pose.position.x = state->values[0];
-            poses.at(i).pose.position.y = state->values[1];
+            markerPublisher_ = nh->advertise<visualization_msgs::MarkerArray>(
+                        "visualization_marker_array", 1);
+            pathPublisher_ = nh->advertise<nav_msgs::Path>("path", 1);
+            planService_ = nh->advertiseService("make_plan",
+                                                &RRTStarPlanner::makePlan, this);
+
+            double squareAreaSide;
+            double obstacleRadius;
+            int    obstacleCount;
+
+            // Get params from parameter server
+            nh->param<double>("/max_run_time_seconds", maxRunTimeSeconds_, 1.0);
+            nh->param<double>("/square_area_side", squareAreaSide, 100.0);
+            nh->param<double>("/obstacle_radius", obstacleRadius, 5.0);
+            nh->param<int>("/obstacle_count", obstacleCount, 30);
+
+            // Create a square area with some random cirular obstacles
+            area_ = SquareArea::create(squareAreaSide,
+                    obstacleRadius, obstacleCount);
         }
-        msg.poses = poses;
-        pathPublisher.publish(msg);
 
-        // Output the length of the path found
-        //std::cout
-        //    << optimizingPlanner->getName()
-        //    << " found a solution of length "
-        //    << pdef->getSolutionPath()->length()
-        //    << " with an optimization objective value of "
-        //    << pdef->getSolutionPath()->cost(pdef->getOptimizationObjective()) << std::endl;
-    }
-    else
-    {
-        res.elapsedTimeMiliseconds = 0.0;
-        res.found = false;
-    }
+        void visualize(double startX, double startY, double goalX, double goalY)
+        {
+            visualization_msgs::MarkerArray markerArray;
+            visualization_msgs::Marker      marker;
+            int id = 0;
 
-    ROS_INFO("request: [start(%lf, %lf), goal(%lf, %lf)]",
-             req.startX, req.startY, req.goalX, req.goalY);
-    ROS_INFO("sending back response: [path found: %s within %lf miliseconds]",
-             res.found ? "true" : "false", res.elapsedTimeMiliseconds);
+            marker.action = visualization_msgs::Marker::ADD;
+            marker.pose.orientation.x = 0.0;
+            marker.pose.orientation.y = 0.0;
+            marker.pose.orientation.z = 0.0;
+            marker.pose.orientation.w = 1.0;
+            marker.color.a = 1.0; // Don't forget to set the alpha!
+            marker.color.r = 1.0;
+            marker.color.g = 0.0;
+            marker.color.b = 0.0;
 
-    return true;
-}
+            // obstacles
+            for (auto obstacle : area_->getObstacles())
+            {
+                marker.type = visualization_msgs::Marker::CYLINDER;
+                marker.header.frame_id = "map";
+                marker.header.stamp = ros::Time::now();
+                marker.id = id;
+                marker.scale.x = obstacle->getRadius() * 2;
+                marker.scale.y = obstacle->getRadius() * 2;
+                marker.scale.z = 0.5;
+                marker.pose.position.x = obstacle->getX();
+                marker.pose.position.y = obstacle->getY();
+                marker.pose.position.z = 0.0;
+                markerArray.markers.push_back(marker);
+                id++;
+            }
+
+            // start position
+            marker.type = visualization_msgs::Marker::CUBE;
+            marker.header.frame_id = "map";
+            marker.header.stamp = ros::Time::now();
+            marker.id = id;
+            marker.scale.x = 1.5;
+            marker.scale.y = 1.5;
+            marker.scale.z = 1.5;
+            marker.pose.position.x = startX;
+            marker.pose.position.y = startY;
+            marker.pose.position.z = 0.0;
+            marker.color.a = 1.0; // Don't forget to set the alpha!
+            marker.color.r = 0.0;
+            marker.color.g = 1.0;
+            marker.color.b = 0.0;
+            id++;
+            markerArray.markers.push_back(marker);
+
+            // goal position
+            marker.type = visualization_msgs::Marker::CUBE;
+            marker.header.frame_id = "map";
+            marker.header.stamp = ros::Time::now();
+            marker.id = id;
+            marker.scale.x = 1.5;
+            marker.scale.y = 1.5;
+            marker.scale.z = 1.5;
+            marker.pose.position.x = goalX;
+            marker.pose.position.y = goalY;
+            marker.pose.position.z = 0.0;
+            marker.color.a = 1.0; // Don't forget to set the alpha!
+            marker.color.r = 0.0;
+            marker.color.g = 0.0;
+            marker.color.b = 1.0;
+            id++;
+            markerArray.markers.push_back(marker);
+
+            markerPublisher_.publish(markerArray);
+        }
+        bool makePlan(rrtstar::MakePlan::Request &req,
+                    rrtstar::MakePlan::Response & res)
+        {
+            visualize(req.startX, req.startY, req.goalX, req.goalY);
+
+            // Construct the robot state space in which we're planning. We're
+            // planning in [0, SQUARE_AREA_SIDE]x[0, SQUARE_AREA_SIDE], a subset of R^2.
+            auto space(std::make_shared<ob::RealVectorStateSpace>(2));
+
+            // Set the bounds of space to be in [0, SQUARE_AREA_SIDE].
+            space->setBounds(0.0, area_->getSide());
+
+            // Construct a space information instance for this state space
+            auto si(std::make_shared<ob::SpaceInformation>(space));
+
+            // Set the object used to check which states in the space are valid
+            auto validityChecker = std::make_shared<ValidityChecker>(si,
+                    area_->getObstacles());
+            si->setStateValidityChecker(validityChecker);
+
+            si->setup();
+
+            // Set our robot's starting state
+            ob::ScopedState<> start(space);
+            start->as<ob::RealVectorStateSpace::StateType>()->values[0] = req.startX;
+            start->as<ob::RealVectorStateSpace::StateType>()->values[1] = req.startY;
+
+            // Set our robot's goal state
+            ob::ScopedState<> goal(space);
+            goal->as<ob::RealVectorStateSpace::StateType>()->values[0] = req.goalX;
+            goal->as<ob::RealVectorStateSpace::StateType>()->values[1] = req.goalY;
+
+            // Create a problem instance
+            auto pdef(std::make_shared<ob::ProblemDefinition>(si));
+
+            // Set the start and goal states
+            pdef->setStartAndGoalStates(start, goal);
+
+            // Create the optimization objective
+            pdef->setOptimizationObjective(allocateObjective(si));
+
+            // Construct the optimal planner
+            ob::PlannerPtr optimizingPlanner = allocatePlanner(si);
+
+            // Set the problem instance for our planner to solve
+            optimizingPlanner->setProblemDefinition(pdef);
+            optimizingPlanner->setup();
+
+            // Attempt to solve the planning problem in the given runtime
+            double startTime = ros::Time::now().toSec();
+            ob::PlannerStatus solved = optimizingPlanner->solve(maxRunTimeSeconds_);
+            double endTime = ros::Time::now().toSec();
+
+            if (solved)
+            {
+                res.elapsedTimeMiliseconds = (endTime - startTime) * 1000.;
+                res.found = true;
+
+                og::PathGeometric pg = *static_cast<og::PathGeometric*>(
+                            pdef->getSolutionPath().get());
+                auto states = pg.getStates();
+                std::vector<geometry_msgs::PoseStamped> poses(states.size());
+                nav_msgs::Path msg;
+                msg.header.frame_id = "map";
+                msg.header.stamp = ros::Time::now();
+                for (int i = 0; i < states.size(); i++)
+                {
+                    const auto* state =
+                            states.at(i)->as<ob::RealVectorStateSpace::StateType>();
+                    poses.at(i).pose.position.x = state->values[0];
+                    poses.at(i).pose.position.y = state->values[1];
+                }
+                msg.poses = poses;
+                pathPublisher_.publish(msg);
+            }
+            else
+            {
+                res.elapsedTimeMiliseconds = 0.0;
+                res.found = false;
+            }
+
+            ROS_INFO("request: [start(%lf, %lf), goal(%lf, %lf)]",
+                    req.startX, req.startY, req.goalX, req.goalY);
+            ROS_INFO("sending back response: [path found: %s within %lf miliseconds]",
+                    res.found ? "true" : "false", res.elapsedTimeMiliseconds);
+
+            return true;
+        }
+
+    private:
+        double             maxRunTimeSeconds_;
+        SquareAreaPtr       area_;
+        ros::Publisher     markerPublisher_;
+        ros::Publisher     pathPublisher_;
+        ros::ServiceServer planService_;
+};
 
 
 int main(int argc, char** argv)
 {
   ros::init(argc, argv, "rrtstar");
-  ros::NodeHandle n;
+  ros::NodeHandle nh;
+  RRTStarPlanner planner(&nh);
 
-  markerPublisher = n.advertise<visualization_msgs::MarkerArray>("visualization_marker_array", 1);
-  pathPublisher = n.advertise<nav_msgs::Path>("path", 1);
-  ros::ServiceServer service = n.advertiseService("make_plan", makePlan);
-  ROS_INFO("Ready for making plan.");
+  ROS_INFO("Ready for making a plan.");
   ros::spin();
 
   return 0;
